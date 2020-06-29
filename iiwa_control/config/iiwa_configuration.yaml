@@ -1,0 +1,25 @@
+configuration:
+  lengths:
+    iiwa7:
+      l02: 0.34
+      l24: 0.4
+      l46: 0.4
+      l6E: 0.126
+    iiwa14:
+      l02: 0.36
+      l24: 0.42
+      l46: 0.4
+      l6E: 0.126
+  
+  flange_offset:
+    basic: 0.0
+    electrical: 0.0
+    pneumatic: 0.0
+    IO_pneumatic: 0.0
+    IO_electrical: 0.0
+    inside_electrical: 0.0
+    touch_pneumatic: 0.026
+    touch_electrical: 0.026
+    IO_valve_pneumatic: 0.026
+
+

@@ -98,27 +98,17 @@ class IiwaSunrise(object):
     model = get_param('~model', 'iiwa14')
     tool_length = get_param('~tool_length', 0.0)
     flange_type = get_param('~flange_type', 'basic')
+    config_namespace = get_param('~config_namespace', 'configuration')
+    calibration_namespace = get_param(
+        '~calibration_namespace', 'calibration')
 
-    if model == 'iiwa7':
-      self.l02 = 0.34
-      self.l24 = 0.4
-    elif model == 'iiwa14':
-      self.l02 = 0.36
-      self.l24 = 0.42
-    else:
-      logerr('unknown robot model')
-      return
+    self.config = IiwaConfiguration(config_namespace, calibration_namespace)
+    self.config.load(model, flange_type)
 
-    if flange_type in ['basic', 'electrical', 'pneumatic', 'IO_pneumatic', 'IO_electrical', 'inside_electrical']:
-      flange_offset = 0.0
-    elif flange_type in ['touch_pneumatic', 'touch_electrical', 'IO_valve_pneumatic']:
-      flange_offset = 0.026
-    else:
-      logerr('unkown flange type')
-      return
-
-    self.l46 = 0.4
-    self.l6E = 0.126 + tool_length + flange_offset
+    self.l02 = self.config.l02
+    self.l24 = self.config.l24
+    self.l46 = self.config.l46
+    self.l6E = self.config.l6E + self.config.flange_offset + tool_length
 
     self.tr = 0.0
     self.v = 1.0
@@ -291,6 +281,67 @@ class IiwaSunrise(object):
     jt.joint_names = self.joint_names
     jt.points.append(jtp)
     self.joint_trajectory_pub.publish(jt)
+  
+  def applyJointOffset(self, t):
+    for i in range(len(t)):
+      t[i] += self.config.joint_offsets[i]
+      
+    return t
+
+
+class IiwaConfiguration(object):
+  def __init__(self, config_namespace, calibration_namespace):
+    self.config_namespace = config_namespace
+    self.calibration_namespace = calibration_namespace
+
+  def load(self, model, flange_type):
+    ns = self.config_namespace
+    cns = self.calibration_namespace
+
+    if not rospy.has_param(ns):
+      logwarn("Configuration not found on parameter server! " +
+              "iiwa14 with basic flange lengths will be used.")
+    else:
+      if not rospy.has_param(ns + "/lengths/" + model):
+        logwarn("Model type " + model + " was not found! Assuming iiwa14")
+      if not rospy.has_param(ns + "/flange_offset/"+flange_type):
+        logwarn("Flange type " + flange_type +
+                " was not found! Assuming type basic")
+
+    if not rospy.has_param(cns):
+      logwarn("Calibration parameters not found on parameter server! " +
+              "No calibration offsets will be used.")
+
+    self.l02 = rospy.get_param(ns + "/lengths/" + model + "/l02", 0.36) \
+        + rospy.get_param(cns + "/length_offsets/l02", 0.0)
+
+    self.l24 = rospy.get_param(ns + "/lengths/" + model + "/l24", 0.42) \
+        + rospy.get_param(cns + "/length_offsets/l24", 0.0)
+
+    self.l46 = rospy.get_param(ns + "/lengths/" + model + "/l46", 0.4) \
+        + rospy.get_param(cns + "/length_offsets/l46", 0.0)
+
+    self.l6E = rospy.get_param(ns + "/lengths/" + model + "/l6E", 0.126) \
+        + rospy.get_param(cns + "/length_offsets/l6E", 0.0)
+
+    self.flange_offset = rospy.get_param(
+        ns + "/flange_offset/"+flange_type, 0.0)
+
+    self.joint_offsets = []
+    self.joint_offsets.append(
+        rospy.get_param(cns + "/joint_offsets/joint_1", 0.0))
+    self.joint_offsets.append(
+        rospy.get_param(cns + "/joint_offsets/joint_2", 0.0))
+    self.joint_offsets.append(
+        rospy.get_param(cns + "/joint_offsets/joint_3", 0.0))
+    self.joint_offsets.append(
+        rospy.get_param(cns + "/joint_offsets/joint_4", 0.0))
+    self.joint_offsets.append(
+        rospy.get_param(cns + "/joint_offsets/joint_5", 0.0))
+    self.joint_offsets.append(
+        rospy.get_param(cns + "/joint_offsets/joint_6", 0.0))
+    self.joint_offsets.append(
+        rospy.get_param(cns + "/joint_offsets/joint_7", 0.0))
 
 if __name__ == "__main__":
   ik = IiwaSunrise()

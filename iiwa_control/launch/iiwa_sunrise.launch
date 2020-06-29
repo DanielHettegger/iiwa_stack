@@ -9,14 +9,22 @@
    {'basic' | 'electrical' | 'pneumatic' | 'IO_pneumatic' | 'IO_electrical' | 'inside_electrical' | 'touch_pneumatic' | 'touch_electrical' | 'IO_valve_pneumatic'}
    -->
   <arg name="flange_type" default="basic"/>
+  <arg name="config_namespace" default="configuration"/>
+  <arg name="calibration_namespace" default="calibration"/>
 
   <group ns="$(arg robot_name)">
+
+    <rosparam file="$(find iiwa_control)/config/iiwa_configuration.yaml" command="load" />
+    <rosparam file="$(find iiwa_control)/config/iiwa_calibration.yaml" command="load" />
+
     <node name="iiwa_sunrise" pkg="iiwa_control" type="iiwa_sunrise.py" output="screen">
       <param name="hardware_interface" value="$(arg hardware_interface)"/>
       <param name="robot_name" value="$(arg robot_name)"/>
       <param name="model" value="$(arg model)"/>
       <param name="tool_length" value="$(arg tool_length)"/>
       <param name="flange_type" value="$(arg flange_type)"/>
+      <param name="config_namespace" value="$(arg config_namespace)"/>
+      <param name="calibration_namespace" value="$(arg calibration_namespace)"/>
     </node>
   </group>
 </launch>
