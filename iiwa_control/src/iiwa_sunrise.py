@@ -266,7 +266,7 @@ class IiwaSunrise(object):
     RE6 = R60.T * RE0
     t[6] = arctan2(RE6[1,0], RE6[0,0])
 
-    self.publishJointPositionCommand(t)
+    self.publishJointPositionCommand(self.applyJointOffset(t))
 
     logdebug('timing: %s ms', 1.0e3 * (clock() - T0))
 
