@@ -46,6 +46,10 @@ from rospy import init_node, get_param, spin
 from tf.transformations import quaternion_from_matrix, quaternion_matrix
 from std_msgs.msg import Float64, Header
 from time import clock
+from urdf_parser_py.urdf import URDF, Robot
+from pykdl_utils.kdl_parser import kdl_tree_from_urdf_model
+from pykdl_utils.kdl_kinematics import KDLKinematics
+import PyKDL
 
 def linearlyMap(x, x1, x2, y1, y2):
   return (y2 - y1)/(x2 - x1) * (x - x1) + y1
@@ -107,30 +111,20 @@ class IiwaSunrise(object):
     tool_length = get_param('~tool_length', 0.0)
     flange_type = get_param('~flange_type', 'basic')
 
-    if model == 'iiwa7':
-      self.l02 = 0.34
-      self.l24 = 0.4
-    elif model == 'iiwa14':
-      self.l02 = 0.36
-      self.l24 = 0.42
-    else:
-      logerr('unknown robot model')
-      return
+    robot = URDF.from_parameter_server("/"+self.robot_name+"/robot_description")
 
-    if flange_type in ['basic', 'electrical', 'pneumatic', 'IO_pneumatic', 'IO_electrical', 'inside_electrical']:
-      flange_offset = 0.0
-    elif flange_type in ['touch_pneumatic', 'touch_electrical', 'IO_valve_pneumatic']:
-      flange_offset = 0.026
-    else:
-      logerr('unkown flange type')
-      return
-
-    self.l46 = 0.4
-    self.l6E = 0.126 + tool_length + flange_offset
+    tree = kdl_tree_from_urdf_model(robot)
+    chain = tree.getChain("{}_link_0".format(self.robot_name), "{}_link_ee".format(self.robot_name))
+    self.l02 = chain.getSegment(0).pose(0)[2,3] + chain.getSegment(1).pose(0)[2,3]
+    self.l24 = chain.getSegment(2).pose(0)[1,3] + chain.getSegment(3).pose(0)[2,3]
+    self.l46 = chain.getSegment(4).pose(0)[1,3] + chain.getSegment(5).pose(0)[2,3]
+    self.l6E = chain.getSegment(6).pose(0)[1,3] + chain.getSegment(7).pose(0)[2,3]
 
     self.tr = 0.0
     self.rs = 2.0
     self.v = 1.0
+
+    self.kdl_kin = KDLKinematics(robot, self.robot_name+"_link_0", self.robot_name+"_link_ee")
 
     self.joint_names = ['{}_joint_1'.format(self.robot_name),
                         '{}_joint_2'.format(self.robot_name),
@@ -139,6 +133,11 @@ class IiwaSunrise(object):
                         '{}_joint_5'.format(self.robot_name),
                         '{}_joint_6'.format(self.robot_name),
                         '{}_joint_7'.format(self.robot_name)]
+
+    self.joint_limits = {}
+    for joint in robot.joints:
+        if joint.name in self.joint_names:
+            self.joint_limits[joint.name] = joint.limit
 
     joint_states_sub = Subscriber('joint_states', JointState, self.jointStatesCb, queue_size = 1)
     command_pose_sub = Subscriber('command/CartesianPose', CartesianPose, self.commandPoseCb, queue_size = 1)
@@ -159,6 +158,16 @@ class IiwaSunrise(object):
         'configuration/ConfigureControlMode', ConfigureControlMode, self.handleSmartServoConfiguration)
 
     spin()
+
+  def checkJointLimits(self, t):
+    limit_exceeded = False
+    for i, ti in enumerate(t):
+      limit = self.joint_limits[self.joint_names[i]]
+      if not (limit.lower <= ti <= limit.upper):
+        loginfo("{} with value {} is not within the joint limit range: {},{}".format(
+            self.joint_names[i], ti, limit.lower, limit.upper))
+        limit_exceeded = True
+    return not limit_exceeded
 
   def jointPositionCb(self, msg):
     self.publishJointPositionCommand(
@@ -312,6 +321,9 @@ class IiwaSunrise(object):
     RE6 = R60.T * RE0
     t[6] = arctan2(RE6[1,0], RE6[0,0])
 
+    if not self.checkJointLimits(t):
+      logwarn('Invalid Pose: Joint limits violated')
+      return
     self.publishJointPositionCommand(t)
 
     logdebug('timing: %s ms', 1.0e3 * (clock() - T0))
